@@ -9,17 +9,15 @@ import qualified TestStringMap
 import qualified TestHashMap
 import qualified TestStringHashMap
 import qualified TestOrig
-import qualified TestString
 
 main = defaultMain
-       [ bench "Assoc"          $ nf (map TestAssoc.guessElement) tests
+       [ bench "Orig"           $ nf (map TestOrig.guessElement) tests
+       , bench "Assoc"          $ nf (map TestAssoc.guessElement) tests
        , bench "StringAssoc"    $ nf (map TestStringAssoc.guessElement) tests
-       , bench "Orig"           $ nf (map TestOrig.guessElement) tests
        , bench "Map"            $ nf (map TestMap.guessElement) tests
-       , bench "String"         $ nf (map TestString.guessElement) tests
        , bench "StringMap"      $ nf (map TestStringMap.guessElement) tests
-       , bench "StringHashMap"  $ nf (map TestHashMap.guessElement) tests
        , bench "HashMap"        $ nf (map TestStringHashMap.guessElement) tests
+       , bench "StringHashMap"  $ nf (map TestHashMap.guessElement) tests
        ]
 
 tests = map BS.pack
