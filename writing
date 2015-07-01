@@ -1,4 +1,4 @@
-Thankfully this doesn't appear to be related to #10527 (which is quite a hard nut to crack). Instead this is due to the fact that `guessElement` is marked `INLINE`. To see why this is problematic, we have to look at how this function is desugared. The pattern match is using `OverloadedStrings`, which desugars this,
+Thankfully this doesn't appear to be related to #10527 (which is quite a hard nut to crack). Instead this is due to the fact that `guessElement` is marked `INLINE` coupled with its rather suboptimial implementation. To see why this is problematic, we have to look at how this function is desugared. The pattern match is using `OverloadedStrings`, which desugars this,
 {{{#!hs
 f :: ByteString -> String
 f "foo" = 1
