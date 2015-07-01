@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables, OverloadedStrings, BangPatterns, FlexibleContexts #-}
 module Main(main) where
 
-import Bio.PDB as PDB
+import Bio.PDB as PDB hiding (assignElement)
 import System.Environment(getArgs)
 import System.IO.Unsafe(unsafePerformIO)
 import System.IO(stderr, stdout, hFlush)
@@ -9,13 +9,18 @@ import Data.ByteString.Char8 as BS
 import Control.DeepSeq
 import Text.Printf
 import System.Exit
---import Control.Parallel
-
-import Bio.PDB.Structure.Elements(atomicMass, assignElement)
+import TestOrig
 
 main = do args <- getArgs
           mapM_ readAndComputeRg args
           exitSuccess
+
+{-# INLINE assignElement #-}
+-- | Given a PDB 'Atom' extract or guess its 'Element' name.
+assignElement :: Atom -> Element
+assignElement at = case element at of
+                     ""   -> guessElement . atName $ at
+                     code -> code
 
 readAndComputeRg filename =
   do Just structure <- PDB.parse filename
@@ -38,7 +43,8 @@ radiusOfGyration structure = avgDistDev
     avgDistDev = sqrt (itfoldl' addDistDev 0.0 structure/totalMass)
     addDistDev !total at = total + vnorm (coord at - center)**2 * atMass at
     atMass :: Atom -> Double
-    atMass at = atomicMass $ case assignElement at of
+    atMass at = realToFrac $ BS.length
+                $ case assignElement at of
                                ""        -> "C"
                                otherwise -> otherwise
     center = v |* (1.0/totalMass)

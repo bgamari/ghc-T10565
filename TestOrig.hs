@@ -6,7 +6,7 @@ import qualified Data.ByteString.Char8 as BS
 {-# NOINLINE guessElement #-}
 -- | Guessing an 'Element' name from PDB 'Atom' name. 
 -- Returns empty string, if 'Element' can't be guessed.
-guessElement :: BS.ByteString -> String
+guessElement :: BS.ByteString -> BS.ByteString
 guessElement "C"   = "C"
 guessElement "C1'" = "C"
 guessElement "C2"  = "C"

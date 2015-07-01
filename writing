@@ -99,7 +99,7 @@ guessElement = \e -> fromMaybe "" $ M.lookup e els
 }}}
 
 Of course, it also has a `Hashable` instance so we can also try `Data.HashMap` from `unordered-containers`. I've prepared a small benchmark 
-(https://github.com/bgamari/ghc-T10565) comparing these options. The results (mean time per iteration, standard deviation, and the size of the tidy core in terms) from a run compiled with `-O2` on my Core i5 laptop can be found below.
+(https://github.com/bgamari/ghc-T10565) comparing these options. The results (mean time per iteration, standard deviation, and the size of the tidy core in terms) from a run compiled with `-O` on my Core i5 laptop can be found below.
 
 ||= **Implementation**      || *Core size*  =||||= **Time per iteration (μs)** =||
 || Original pattern match   || 5071           || 24.5 || ± 1.0 ||
@@ -107,8 +107,8 @@ Of course, it also has a `Hashable` instance so we can also try `Data.HashMap` f
 || `lookup` on `ByteString` || 1818           || 52.8 || ± 1.3 ||
 || `lookup` on `String`     || 719            || 55.9 || ± 1.3 ||
 |||||||| ''Association list (inlined)''                        ||
-|| `lookup` on `ByteString` || 2131           || 31.5 || ± 1.3 ||
-|| `lookup` on `String`     || 783            || 39.3 || ± 1.3 ||
+|| `lookup` on `ByteString` || 1925           || 31.5 || ± 1.3 ||
+|| `lookup` on `String`     || 775            || 39.3 || ± 1.3 ||
 |||||||| ''Ordered map''                                       ||
 || `lookup` on `ByteString` || 2449           || 7.7  || ± 0.5 ||
 || `lookup` on `String`     || 1202           || 10.5 || ± 0.3 ||
@@ -117,6 +117,8 @@ Of course, it also has a `Hashable` instance so we can also try `Data.HashMap` f
 || `lookup` on `String`     || 1669           || 5.0  || ± 0.1 ||
 
 We see that while using `lookup` produces a substantially smaller program, it performs substantially worse than the original pattern match. Looking at the Core we see that it is not inlined at all. If we take the implementation of `lookup` and plop it in the module we find that things are a bit better, but still not back to where we started.
+
+When we switch to a map however, we find that things improve significantly. The difference between unordered map and ordered map is likely just a function of how much work has gone into optimizing the respective implementations.
 
 
 == Improving GHC? ==
@@ -147,6 +149,6 @@ f "d" 4 = resultE
 f "d" _ = resultF
 f _   _ = resultG
 }}}
-It would be rather difficult to define matching semantics which took advantage of the above `match` function yet treated cases like the above (or even simpler cases). Consequently, in many cases the user would still need to fall back to the current approach of manually implementing their desired match behavior.
+It would be rather difficult to define matching semantics which took advantage of the `match` function introduced above yet treated cases like this (or even simpler cases). Consequently, in many cases the user would still need to fall back to the current approach of manually implementing their desired match behavior.
 
-Ultimately, these are decisions that should arguably be left to the user anyways. Data structure choice will be highly specific to the structure of the alternatives and values being scrutinized.
+Ultimately, these are decisions that should arguably be left to the user anyways. Data structure choice will be highly specific to the structure of the alternatives and values being scrutinized. The compiler is not in a position to be able to wisely choose from the numerous options.
