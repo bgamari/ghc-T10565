@@ -99,19 +99,19 @@ guessElement = \e -> fromMaybe "" $ M.lookup e els
 }}}
 
 Of course, it also has a `Hashable` instance so we can also try `Data.HashMap` from `unordered-containers`. I've prepared a small benchmark 
-(https://github.com/bgamari/ghc-T10565) comparing these options. The results (including the size of the tidy core in terms) from a run on my Core i5 laptop can be found below.
+(https://github.com/bgamari/ghc-T10565) comparing these options. The results (mean time per iteration, standard deviation, and the size of the tidy core in terms) from a run compiled with `-O2` on my Core i5 laptop can be found below.
 
 ||= **Implementation**      || *Core size*  =||||= **Time per iteration (μs)** =||
-|| Original pattern match   || 5071           || 21.2 || ± 1.9 ||
+|| Original pattern match   || 5071           || 24.5 || ± 1.0 ||
 |||||||| ''Association list''                                  ||
-|| `lookup` on `ByteString` || 1818           || 42.1 || ± 2.0 ||
-|| `lookup` on `String`     || 719            || 38.9 || ± 1.8 ||
+|| `lookup` on `ByteString` || 1818           || 52.8 || ± 1.3 ||
+|| `lookup` on `String`     || 719            || 55.9 || ± 1.3 ||
 |||||||| ''Ordered map''                                       ||
-|| `lookup` on `ByteString` || 2449           || 6.6  || ± 0.5 ||
-|| `lookup` on `String`     || 1202           || 8.5  || ± 0.4 ||
+|| `lookup` on `ByteString` || 2449           || 7.7  || ± 0.5 ||
+|| `lookup` on `String`     || 1202           || 10.5 || ± 0.3 ||
 |||||||| ''Unordered map''                                     ||
-|| `lookup` on `ByteString` || 3731           || 4.1  || ± 0.1 ||
-|| `lookup` on `String`     || 1669           || 4.3  || ± 0.5 ||
+|| `lookup` on `ByteString` || 3731           || 6.8  || ± 0.2 ||
+|| `lookup` on `String`     || 1669           || 5.0  || ± 0.1 ||
 
 We see that the association list
 

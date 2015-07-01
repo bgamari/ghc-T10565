@@ -4,6 +4,8 @@ import qualified Data.ByteString.Char8 as BS
 
 import qualified TestAssoc
 import qualified TestStringAssoc
+import qualified TestAssoc2
+import qualified TestStringAssoc2
 import qualified TestMap
 import qualified TestStringMap
 import qualified TestHashMap
@@ -14,6 +16,8 @@ main = defaultMain
        [ bench "Orig"           $ nf (map TestOrig.guessElement) tests
        , bench "Assoc"          $ nf (map TestAssoc.guessElement) tests
        , bench "StringAssoc"    $ nf (map TestStringAssoc.guessElement) tests
+       , bench "Assoc2"         $ nf (map TestAssoc2.guessElement) tests
+       , bench "StringAssoc2"   $ nf (map TestStringAssoc2.guessElement) tests
        , bench "Map"            $ nf (map TestMap.guessElement) tests
        , bench "StringMap"      $ nf (map TestStringMap.guessElement) tests
        , bench "HashMap"        $ nf (map TestStringHashMap.guessElement) tests
