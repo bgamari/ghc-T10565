@@ -1,0 +1,149 @@
+Thankfully this doesn't appear to be related to #10527 (which is quite a hard nut to crack). Instead this is due to the fact that `guessElement` is marked `INLINE`. To see why this is problematic, we have to look at how this function is desugared. The pattern match is using `OverloadedStrings`, which desugars this,
+{{{#!hs
+f :: ByteString -> String
+f "foo" = 1
+f "bar" = 2
+f _ = 3
+}}}
+Roughly into this,
+{{{#!hs
+f :: ByteString -> String
+f x | x == (fromString "foo" :: ByteString) = 1
+f x | x == (fromString "bar" :: ByteString) = 2
+f _ = 3
+}}}
+Note that we are using using `ByteString`'s `Eq` instance here to check the pattern match. These guards are then lowered to nested `case` analyses in the desugared Core.
+
+
+It is with this Core that we enter the Core-to-Core optimization pipeline. `ByteString`'s `Eq` instance looks like this,
+{{{#!hs
+instance Eq ByteString where
+    (==) = eq
+
+eq :: ByteString -> ByteString -> Bool
+eq a@(PS fp off len) b@(PS fp' off' len')
+  | len /= len'              = False    -- short cut on length
+  | fp == fp' && off == off' = True     -- short cut for the same string
+  | otherwise                = compareBytes a b == EQ
+{-# INLINE eq #-}
+
+compareBytes :: ByteString -> ByteString -> Ordering
+compareBytes = ...
+}}}
+
+Despite `(==)` not having an explicit `INLINE` pragma, GHC is still quite eager to inline in. Consequently our chain of equality comparisons in `f` quickly explodes into a large ball of deeply nested cases.
+
+To make matters a bit worse, the literal of each alternative is itself a fair amount of code. e.g. the `"OG1"` literal is floated out into a top-level binding looking like this,
+{{{#!hs
+lvl10_r5ix :: BS.ByteString
+[GblId, Str=DmdType]
+lvl10_r5ix =
+  case newMutVar# @ Finalizers @ RealWorld NoFinalizers realWorld#
+  of _ [Occ=Dead] { (# ipv_a3qk, ipv1_a3ql #) ->
+  let {
+    s_a263 :: Addr#
+    [LclId, Str=DmdType]
+    s_a263 = "OG1"# } in
+  case {__pkg_ccall bytestring-0.10.6.0 strlen Addr#
+                                        -> State# RealWorld -> (# State# RealWorld, Word# #)}_a3rx
+         s_a263 ipv_a3qk
+  of _ [Occ=Dead] { (# ds3_a3rC, ds4_a3rD #) ->
+  Data.ByteString.Internal.PS
+    s_a263 (PlainForeignPtr ipv1_a3ql) 0# (word2Int# ds4_a3rD)
+  }
+  }
+}}}
+
+== Resolution ==
+
+Above we saw that the original code has a few issues,
+
+ 1. `ByteString`'s sizeable `(==)` implementation is inlined once for each alternative, resulting in a large quantity of code for `f`
+ 2. The pattern match desugars to a linear search where some more efficient strategy would be desired
+
+Let's first look at how we might fix (1), which causes the simplifier blow-up noted in this bug. After this we can move on to improving the asymptotic issue, (2).
+
+**Note**: To some extent, the pattern matching behavior exposed by `OverloadedStrings` is a bit dangerous as it emulates pattern matching, something that most Haskellers regard as "cheap" (up to the cost of forcing the scrutinee), with a call to an arbitrarily complex function.
+
+Issue (1) arises from the desugaring of the `OverloadedStrings` pattern match, which produces a new test for every alternative. GHC will then happily inline `(==)` in to each of these despite the fact that there is no benefit to doing so. Ideally we would want to make it obvious to GHC that the comparison should be shared. One way to accomplish this would be to encode the alternatives as an associated list and use `lookup`,
+{{{#!hs
+guessElement :: BS.ByteString -> String
+guessElement = \e -> fromMaybe "" $ lookup e els
+  where
+    els :: [(ByteString, String)]
+    els =
+        [ ("C"   , "C"),
+          ("C1'" , "C"),
+          ("C2"  , "C"),
+          ...
+        ]
+}}}
+Here we ensure that there is exactly one use of `(==)`, preventing the explosion of code.
+
+While we are looking at optimizations we might also consider that `ByteString` is generally best used with large strings. In the case of small comparisons like this it might be worthwhile to avoid using `ByteString`'s `Eq` altogether and instead compare `String`s,
+{{{#!hs
+guessElement :: BS.ByteString -> String
+guessElement = \e -> fromMaybe "" $ lookup (BS.unpack e) els
+  where
+    els :: [(String, String)]
+    els = [ ... ]
+}}}
+
+However, both of these avoid solving the issue of linear search. For this we can turn to any number of finite map data structures. For instance, we know that `ByteString` has an `Ord` instance so we can employ `Data.Map` from `containers`,
+{{{#!hs
+guessElement :: BS.ByteString -> String
+guessElement = \e -> fromMaybe "" $ M.lookup e els
+  where
+    els :: M.Map BS.ByteString String
+    els = M.fromList [ ... ]
+}}}
+
+Of course, it also has a `Hashable` instance so we can also try `Data.HashMap` from `unordered-containers`. I've prepared a small benchmark 
+(https://github.com/bgamari/ghc-T10565) comparing these options. The results (including the size of the tidy core in terms) from a run on my Core i5 laptop can be found below.
+
+||= **Implementation**      || *Core size*  =||||= **Time per iteration (μs)** =||
+|| Original pattern match   || 5071           || 21.2 || ± 1.9 ||
+|||||||| ''Association list''                                  ||
+|| `lookup` on `ByteString` || 1818           || 42.1 || ± 2.0 ||
+|| `lookup` on `String`     || 719            || 38.9 || ± 1.8 ||
+|||||||| ''Ordered map''                                       ||
+|| `lookup` on `ByteString` || 2449           || 6.6  || ± 0.5 ||
+|| `lookup` on `String`     || 1202           || 8.5  || ± 0.4 ||
+|||||||| ''Unordered map''                                     ||
+|| `lookup` on `ByteString` || 3731           || 4.1  || ± 0.1 ||
+|| `lookup` on `String`     || 1669           || 4.3  || ± 0.5 ||
+
+We see that the association list
+
+
+== Improving GHC? ==
+
+In an ideal world GHC would be able to look at the original code and independently determine something like we determined above. The key insight that we had here is that our `ByteString` type has structure beyond the `Eq` used by `OverloadedString`'s pattern matching behavior.  Can we teach GHC to have this same insight?
+
+It would be possible for the compiler to construct a similar lookup data structure for pattern matches on `IsString` types also having an `Ord` instance. The trouble with this is that the operational behavior of the program is now dependent upon which instances are in scope. This seems like a very undesirable property.
+
+One could instead add a `compare' :: a -> a -> Ordering` to `IsString`, allowing GHC to generate efficient logarithmic lookups without a dependence on which instances are available.
+
+The above option, however, prevents us from using the best tool in our arsenault, the `HashMap`. Another more general possibility would be to add function to `IsString` to explicitly handle matching against groups of patterns. The compiler would collect the pattern matches which can be simultaneously resolved and pass them, along with the scrutinee, to a `match` function. This might look like this,
+{{{#!hs
+class IsString a where
+    fromString :: String -> a
+    toString :: a -> String
+    match :: [(a, b)] -> a -> b
+}}}
+This, however, carries with it a number of issues. Perhaps most concerning is the fact that now a library author has the ability to break pattern matching semantics (consider, for instance, `match alts _ = last alts`). Moreover, all of these have unfortunate compatibility issues.
+
+Finally, these options all interact very poorly with more complex pattern matches. Take for instance,
+{{{#!hs
+f :: String -> Int -> Result
+f "a" _ = resultA
+f "b" _ = resultB
+f _   3 = resultC
+f "c" _ = resultD
+f "d" 4 = resultE
+f "d" _ = resultF
+f _   _ = resultG
+}}}
+It would be rather difficult to define matching semantics which took advantage of the above `match` function yet treated cases like the above (or even simpler cases). Consequently, in many cases the user would still need to fall back to the current approach of manually implementing their desired match behavior.
+
+Ultimately, these are decisions that should arguably be left to the user anyways. Data structure choice will be highly specific to the structure of the alternatives and values being scrutinized.
