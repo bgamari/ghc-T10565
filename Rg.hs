@@ -10,8 +10,8 @@ import Control.DeepSeq
 import Text.Printf
 import System.Exit
 
--- Select the assignElement implementation here.
--- Be use to remove the NOINLINE in the selected implementation. 
+-- Select the guessElement implementation here.
+-- Be use to remove the NOINLINE in the selected implementation.
 import TestOrig
 
 main = do args <- getArgs

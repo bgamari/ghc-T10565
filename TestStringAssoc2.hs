@@ -16,7 +16,7 @@ lookup' x = go
 {-# NOINLINE guessElement #-}
 -- | Guessing an 'Element' name from PDB 'Atom' name.
 -- Returns empty string, if 'Element' can't be guessed.
-guessElement :: BS.ByteString -> String
+guessElement :: BS.ByteString -> BS.ByteString
 guessElement = \e -> fromMaybe "" $ lookup' (BS.unpack e) els
   where
     els =
