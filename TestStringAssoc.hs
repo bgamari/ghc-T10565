@@ -1,6 +1,6 @@
 
 {-# LANGUAGE OverloadedStrings #-}
-module TestAssoc where
+module TestStringAssoc where
 
 import qualified Data.ByteString.Char8 as BS
 import Data.Maybe
@@ -9,7 +9,7 @@ import Data.Maybe
 -- | Guessing an 'Element' name from PDB 'Atom' name.
 -- Returns empty string, if 'Element' can't be guessed.
 guessElement :: BS.ByteString -> String
-guessElement = \e -> fromMaybe "" $ lookup e els
+guessElement = \e -> fromMaybe "" $ lookup (BS.unpack e) els
   where
     els =
         [ ("C"   , "C"),

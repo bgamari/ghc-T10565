@@ -3,6 +3,7 @@ import Criterion.Main
 import qualified Data.ByteString.Char8 as BS
 
 import qualified TestAssoc
+import qualified TestStringAssoc
 import qualified TestMap
 import qualified TestStringMap
 import qualified TestHashMap
@@ -12,6 +13,7 @@ import qualified TestString
 
 main = defaultMain
        [ bench "Assoc"          $ nf (map TestAssoc.guessElement) tests
+       , bench "StringAssoc"    $ nf (map TestStringAssoc.guessElement) tests
        , bench "Orig"           $ nf (map TestOrig.guessElement) tests
        , bench "Map"            $ nf (map TestMap.guessElement) tests
        , bench "String"         $ nf (map TestString.guessElement) tests
