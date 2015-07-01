@@ -10,7 +10,7 @@ import Data.Maybe
 -- | Guessing an 'Element' name from PDB 'Atom' name. 
 -- Returns empty string, if 'Element' can't be guessed.
 guessElement :: BS.ByteString -> String
-guessElement = \e -> fromMaybe "" $ M.lookup e els
+guessElement = \e -> fromMaybe "" $ M.lookup (BS.unpack e) els
   where
     els = M.fromList
         [ ("C"   , "C"),
